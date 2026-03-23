@@ -11,6 +11,35 @@ Using a dataset of **203,000 Kickstarter campaigns **, it is built a fully repro
 
 ---
 
+## Dataset
+
+The project uses the public Kickstarter dataset hosted on Hugging Face (Parquet format), covering historical campaign records from multiple countries and categories.
+
+### Source
+- Hugging Face Kickstarter dataset (downloaded by `assets/ingestion/ingest_raw.py`)
+- File format: Parquet shards
+- Ingestion output: merged and deduplicated parquet file stored in GCS
+
+### Coverage
+- ~203,000 campaigns
+- Includes campaign metadata, funding targets, pledged amounts, dates, category details, country, and campaign outcome state
+- Data supports analysis by time, geography, category, goal size, and duration
+
+### Core Fields Used in Analysis
+- `id` / campaign identifier
+- `name`, `category`, `country`
+- `goal`, `pledged`, `currency`
+- `launched`, `deadline`
+- `state` (used to derive success/failure)
+- `staff_pick` and other campaign-level attributes
+
+### Data Quality and Processing Notes
+- Duplicate campaigns are removed during ingestion based on campaign ID
+- Types are standardized in the staging layer (numeric, boolean, datetime)
+- Additional analytical fields are derived, such as campaign duration and success flags
+- Validation checks are applied in staging before creating marts
+
+---
 ## Architecture Overview
 
 ```
