@@ -1,0 +1,20 @@
+id: kickstarter-ingestion-pipeline
+schedule: "daily"
+start_date: "2024-01-01"
+
+variables:
+  GCP_PROJECT_ID:
+    type: string
+    default: ""
+  GCS_BUCKET:
+    type: string
+    default: ""
+  BQ_DATASET_RAW:
+    type: string
+    default: ""
+  BQ_DATASET_DBT:
+    type: string
+    default: ""
+  GCP_REGION:
+    type: string
+    default: ""
