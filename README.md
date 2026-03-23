@@ -7,7 +7,7 @@ Kickstarter is one of the world's largest crowdfunding platforms, yet **over 60%
 This project answers the question:
 > **What factors — category, funding goal, country, staff pick status, and campaign duration — best predict whether a Kickstarter campaign will succeed?**
 
-Using a dataset of **203,000 Kickstarter campaigns **, we build a fully reproducible, cloud-based batch data pipeline that ingests raw data, stores it in a data lake, transforms it in a data warehouse, and presents findings in a dashboard.
+Using a dataset of **203,000 Kickstarter campaigns **, it is built a fully reproducible, cloud-based batch data pipeline that ingests raw data, stores it in a data lake, transforms it in a data warehouse, and presents findings in a dashboard.
 
 ---
 
