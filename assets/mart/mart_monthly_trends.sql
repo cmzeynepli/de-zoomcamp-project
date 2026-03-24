@@ -28,7 +28,7 @@ columns:
 with stg as (
 
     select *
-    from `{{ var.GCP_PROJECT_ID }}.kickstarter_dbt.stg_kickstarter`
+    from `{{ var.GCP_PROJECT_ID }}.{{ var.BQ_DATASET_DBT }}.stg_kickstarter`
     where launch_year is not null
       and launch_month is not null
 

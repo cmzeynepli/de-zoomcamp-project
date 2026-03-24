@@ -302,6 +302,9 @@ export GCP_REGION="us-central1"
 
 All assets use the `gcp-kickstarter` connection defined in `bruin/.bruin.yml`, which reads credentials from `GOOGLE_APPLICATION_CREDENTIALS`.
 
+> ⚠️ **Bruin header limitation:** Jinja variables are not supported in the Bruin asset header section (e.g. `name`/`database` metadata in SQL and Python asset files).  
+> Because of this, the database name in asset identifiers stays fixed as `kickstarter_dbt` and cannot be made dynamic from `.env` variables.
+
 ---
 
 ## Data Warehouse Design

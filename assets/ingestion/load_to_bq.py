@@ -38,10 +38,14 @@ def run():
     gcs_bucket = os.environ.get("GCS_BUCKET")
     bq_project = os.environ.get("GCP_PROJECT_ID")
     bq_dataset = os.environ.get("BQ_DATASET_RAW")
-    bq_table   = os.environ.get("BQ_DATASET_RAW")
+    bq_table   = os.environ.get("BQ_TABLE_RAW")
 
     if not gcs_bucket:
         raise ValueError("GCS_BUCKET env var is required")
+    if not bq_project:
+        raise ValueError("GCP_PROJECT_ID env var is required")
+    if not bq_dataset:
+        raise ValueError("BQ_DATASET_RAW env var is required")
     if not os.path.exists(SA_KEY_PATH):
         raise FileNotFoundError(f"SA key not found: {SA_KEY_PATH}")
 

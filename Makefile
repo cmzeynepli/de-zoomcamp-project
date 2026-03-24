@@ -13,7 +13,7 @@ ifneq (,$(wildcard $(ENV_FILE)))
   export $(shell sed 's/=.*//' $(ENV_FILE) | grep -v '^\#' | grep -v '^$$')
 endif
 
-.PHONY: help prereqs setup check-sa check-env infra-plan infra-apply infra-destroy pipeline clean all
+.PHONY: help prereqs setup check-sa check-env check-terraform infra-plan infra-apply infra-destroy pipeline clean all
 
 help:
 	@echo ""
@@ -105,6 +105,17 @@ check-sa:
 	)
 	@echo "✓ $(SA_KEY) found"
 
+check-terraform:
+	@command -v terraform >/dev/null 2>&1 || ( \
+		echo ""; \
+		echo "ERROR: terraform not found."; \
+		echo "  Fix: run 'make prereqs' (or install Terraform manually)"; \
+		echo "  Docs: https://developer.hashicorp.com/terraform/install"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ terraform found"
+
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
 prereqs:
@@ -126,10 +137,40 @@ prereqs:
 				echo "ERROR: Homebrew not found. Install it from https://brew.sh then re-run: make prereqs"; \
 				exit 1; \
 			fi; \
-			brew install terraform; \
+			brew tap hashicorp/tap >/dev/null 2>&1 || true; \
+			brew install hashicorp/tap/terraform; \
 		elif [ "$$OS" = "Linux" ]; then \
 			if command -v apt-get >/dev/null 2>&1; then \
-				sudo apt-get update && sudo apt-get install -y terraform; \
+				set -e; \
+				# Some devcontainers ship with extra apt sources (e.g. Yarn) that can break apt-get update due to missing keys. \
+				# On Ubuntu, fix Yarn's key + signed-by; if apt still fails, disable Yarn repo for this run. \
+				if [ -f /etc/apt/sources.list.d/yarn.list ]; then \
+					sudo apt-get install -y gnupg curl; \
+					sudo install -m 0755 -d /etc/apt/keyrings; \
+					curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/yarn.gpg; \
+					if grep -q "dl.yarnpkg.com/debian" /etc/apt/sources.list.d/yarn.list; then \
+						sudo cp /etc/apt/sources.list.d/yarn.list /etc/apt/sources.list.d/yarn.list.bak >/dev/null 2>&1 || true; \
+						sudo sed -i -E 's|^\s*deb(\s+)(\[.*\]\s+)?https://dl\.yarnpkg\.com/debian/\s+stable\s+main|deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main|g' /etc/apt/sources.list.d/yarn.list; \
+					fi; \
+				fi; \
+				if ! sudo apt-get update; then \
+					if [ -f /etc/apt/sources.list.d/yarn.list ]; then \
+						echo "WARNING: apt-get update failed; disabling Yarn repo and retrying..."; \
+						sudo mv /etc/apt/sources.list.d/yarn.list /etc/apt/sources.list.d/yarn.list.disabled >/dev/null 2>&1 || true; \
+					fi; \
+					sudo apt-get update; \
+				fi; \
+				# Prefer official HashiCorp repo for consistent Terraform packages \
+				if sudo apt-get install -y terraform >/dev/null 2>&1; then \
+					true; \
+				else \
+					sudo apt-get install -y gnupg software-properties-common curl; \
+					sudo install -m 0755 -d /etc/apt/keyrings; \
+					curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/hashicorp-archive-keyring.gpg; \
+					echo "deb [signed-by=/etc/apt/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $$(. /etc/os-release && echo $$VERSION_CODENAME) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null; \
+					sudo apt-get update; \
+					sudo apt-get install -y terraform; \
+				fi; \
 			else \
 				echo "ERROR: Unsupported Linux package manager. Please install Terraform manually: https://developer.hashicorp.com/terraform/install"; \
 				exit 1; \
@@ -154,7 +195,7 @@ setup:
 
 # ─── Infrastructure ──────────────────────────────────────────────────────────
 
-infra-plan: check-env check-sa
+infra-plan: check-env check-sa check-terraform
 	cd terraform && terraform init -upgrade && \
 	terraform plan \
 		-var="project_id=$(GCP_PROJECT_ID)" \
@@ -164,7 +205,7 @@ infra-plan: check-env check-sa
 		-var="bq_dataset_raw=$(BQ_DATASET_RAW)" \
 		-var="bq_dataset_dbt=$(BQ_DATASET_DBT)"
 
-infra-apply: check-env check-sa
+infra-apply: check-env check-sa check-terraform
 	cd terraform && terraform init && \
 	terraform apply -auto-approve \
 		-var="project_id=$(GCP_PROJECT_ID)" \
@@ -175,7 +216,7 @@ infra-apply: check-env check-sa
 		-var="bq_dataset_dbt=$(BQ_DATASET_DBT)"
 	@echo "✓ Infrastructure provisioned"
 
-infra-destroy: check-env check-sa
+infra-destroy: check-env check-sa check-terraform
 	@echo "WARNING: This will delete GCS bucket and BigQuery datasets!"
 	@read -p "Are you sure? [y/N] " ans && [ "$$ans" = "y" ]
 	cd terraform && terraform destroy -auto-approve \
@@ -198,7 +239,7 @@ pipeline: check-env check-sa
 
 # ─── Full run ────────────────────────────────────────────────────────────────
 
-all: infra-apply pipeline
+all: prereqs setup check-env check-sa infra-apply pipeline
 	@echo ""
 	@echo "🎉 Full pipeline complete!"
 	@echo "   → Open Looker Studio and follow dashboard/README.md"
