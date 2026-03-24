@@ -128,6 +128,13 @@ secrets/sa.json
 
 ---
 
+## Prerequisites
+
+- **OS**: macOS or Linux (Windows users: use **WSL** or Git Bash)
+- **Python + pip**: Python 3.x with `pip` available (used for `requirements.txt`)
+- **Terraform**: required for provisioning GCS + BigQuery via `terraform/`
+- **Bruin CLI**: required to run the pipeline. Install instructions: [Bruin docs](https://getbruin.com/docs/bruin/)
+
 ## Quick Start
 
 ### 1. Clone and configure environment

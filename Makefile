@@ -13,12 +13,13 @@ ifneq (,$(wildcard $(ENV_FILE)))
   export $(shell sed 's/=.*//' $(ENV_FILE) | grep -v '^\#' | grep -v '^$$')
 endif
 
-.PHONY: help setup check-sa check-env infra-plan infra-apply infra-destroy pipeline clean all
+.PHONY: help prereqs setup check-sa check-env infra-plan infra-apply infra-destroy pipeline clean all
 
 help:
 	@echo ""
 	@echo "Kickstarter Analytics Pipeline — Commands"
 	@echo "─────────────────────────────────────────"
+	@echo "  make prereqs        Install Terraform + Bruin (and ensure pip)"
 	@echo "  make setup          Install Python dependencies"
 	@echo "  make check-sa       Verify secrets/sa.json exists"
 	@echo "  make infra-plan     Terraform plan (preview GCP resources)"
@@ -46,6 +47,51 @@ check-env:
 		exit 1 \
 	)
 	@echo "✓ GCP_PROJECT_ID = $(GCP_PROJECT_ID)"
+	@test -n "$(GCS_BUCKET)" || ( \
+		echo ""; \
+		echo "ERROR: GCS_BUCKET is not set."; \
+		echo "  1. cp .env.example .env"; \
+		echo "  2. Edit .env and fill in your values"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ GCS_BUCKET = $(GCS_BUCKET)"
+	@test -n "$(GCP_REGION)" || ( \
+		echo ""; \
+		echo "ERROR: GCP_REGION is not set."; \
+		echo "  1. cp .env.example .env"; \
+		echo "  2. Edit .env and fill in your values"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ GCP_REGION = $(GCP_REGION)"
+	@test -n "$(BQ_LOCATION)" || ( \
+		echo ""; \
+		echo "ERROR: BQ_LOCATION is not set (example: US or EU)."; \
+		echo "  1. cp .env.example .env"; \
+		echo "  2. Edit .env and fill in your values"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ BQ_LOCATION = $(BQ_LOCATION)"
+	@test -n "$(BQ_DATASET_RAW)" || ( \
+		echo ""; \
+		echo "ERROR: BQ_DATASET_RAW is not set."; \
+		echo "  1. cp .env.example .env"; \
+		echo "  2. Edit .env and fill in your values"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ BQ_DATASET_RAW = $(BQ_DATASET_RAW)"
+	@test -n "$(BQ_DATASET_DBT)" || ( \
+		echo ""; \
+		echo "ERROR: BQ_DATASET_DBT is not set."; \
+		echo "  1. cp .env.example .env"; \
+		echo "  2. Edit .env and fill in your values"; \
+		echo ""; \
+		exit 1 \
+	)
+	@echo "✓ BQ_DATASET_DBT = $(BQ_DATASET_DBT)"
 
 check-sa:
 	@test -f $(SA_KEY) || ( \
@@ -61,8 +107,49 @@ check-sa:
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
+prereqs:
+	@set -e; \
+	OS="$$(uname -s)"; \
+	echo "Detected OS: $$OS"; \
+	if command -v python3 >/dev/null 2>&1; then \
+		python3 -m pip --version >/dev/null 2>&1 || (echo "ERROR: pip not available for python3. Please install pip."; exit 1); \
+		echo "✓ python3 + pip available"; \
+	else \
+		echo "ERROR: python3 not found. Please install Python 3 first."; \
+		exit 1; \
+	fi; \
+	if command -v terraform >/dev/null 2>&1; then \
+		echo "✓ terraform already installed"; \
+	else \
+		if [ "$$OS" = "Darwin" ]; then \
+			if ! command -v brew >/dev/null 2>&1; then \
+				echo "ERROR: Homebrew not found. Install it from https://brew.sh then re-run: make prereqs"; \
+				exit 1; \
+			fi; \
+			brew install terraform; \
+		elif [ "$$OS" = "Linux" ]; then \
+			if command -v apt-get >/dev/null 2>&1; then \
+				sudo apt-get update && sudo apt-get install -y terraform; \
+			else \
+				echo "ERROR: Unsupported Linux package manager. Please install Terraform manually: https://developer.hashicorp.com/terraform/install"; \
+				exit 1; \
+			fi; \
+		else \
+			echo "ERROR: Unsupported OS ($$OS). Please install Terraform manually."; \
+			exit 1; \
+		fi; \
+		echo "✓ terraform installed"; \
+	fi; \
+	if command -v bruin >/dev/null 2>&1; then \
+		echo "✓ bruin already installed"; \
+	else \
+		curl -LsSf https://getbruin.com/install/cli | sh; \
+		echo "✓ bruin installed"; \
+		echo "Note: make sure ~/.local/bin is on your PATH for new shells."; \
+	fi
+
 setup:
-	pip install -r requirements.txt
+	python3 -m pip install -r requirements.txt
 	@echo "✓ Python dependencies installed"
 
 # ─── Infrastructure ──────────────────────────────────────────────────────────
@@ -71,13 +158,21 @@ infra-plan: check-env check-sa
 	cd terraform && terraform init -upgrade && \
 	terraform plan \
 		-var="project_id=$(GCP_PROJECT_ID)" \
-		-var="bucket_name=$(GCS_BUCKET)"
+		-var="bucket_name=$(GCS_BUCKET)" \
+		-var="region=$(GCP_REGION)" \
+		-var="bq_location=$(BQ_LOCATION)" \
+		-var="bq_dataset_raw=$(BQ_DATASET_RAW)" \
+		-var="bq_dataset_dbt=$(BQ_DATASET_DBT)"
 
 infra-apply: check-env check-sa
 	cd terraform && terraform init && \
 	terraform apply -auto-approve \
 		-var="project_id=$(GCP_PROJECT_ID)" \
-		-var="bucket_name=$(GCS_BUCKET)"
+		-var="bucket_name=$(GCS_BUCKET)" \
+		-var="region=$(GCP_REGION)" \
+		-var="bq_location=$(BQ_LOCATION)" \
+		-var="bq_dataset_raw=$(BQ_DATASET_RAW)" \
+		-var="bq_dataset_dbt=$(BQ_DATASET_DBT)"
 	@echo "✓ Infrastructure provisioned"
 
 infra-destroy: check-env check-sa
@@ -85,7 +180,11 @@ infra-destroy: check-env check-sa
 	@read -p "Are you sure? [y/N] " ans && [ "$$ans" = "y" ]
 	cd terraform && terraform destroy -auto-approve \
 		-var="project_id=$(GCP_PROJECT_ID)" \
-		-var="bucket_name=$(GCS_BUCKET)"
+		-var="bucket_name=$(GCS_BUCKET)" \
+		-var="region=$(GCP_REGION)" \
+		-var="bq_location=$(BQ_LOCATION)" \
+		-var="bq_dataset_raw=$(BQ_DATASET_RAW)" \
+		-var="bq_dataset_dbt=$(BQ_DATASET_DBT)"
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
 
